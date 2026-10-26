@@ -62,3 +62,9 @@ implemented incrementally. Phase 4 adds source-grounded study notes, ranked
 keywords, and a glossary. Glossary entries that lack an explicit definition in
 the lecture are marked as needing verification. Quiz generation and export
 remain deferred.
+
+Phase 5 adds validated, source-grounded multiple-choice quiz generation. The
+local generator uses explicit lecture definitions rather than a second large
+question-generation model, so short lectures may produce fewer questions than
+requested when there is not enough source-supported material. Interactive
+scoring and export remain deferred.
