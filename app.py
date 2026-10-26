@@ -83,6 +83,10 @@ def _render_lecture_metadata(lecture: LectureText) -> None:
 
 
 def _generate_analysis(lecture: LectureText) -> None:
+    if not lecture.text.strip():
+        st.error("No readable lecture text was extracted. Nothing can be generated.")
+        return
+
     with st.spinner("Generating summaries and study materials..."):
         try:
             summaries = get_summarizer().summarize(lecture.text)
@@ -93,13 +97,17 @@ def _generate_analysis(lecture: LectureText) -> None:
             st.error(str(error))
             return
 
-    st.session_state["analysis"] = {
+    analysis = {
         "source_text": lecture.text,
         "summaries": summaries,
         "keywords": keywords,
         "glossary": glossary,
         "notes": notes,
     }
+    if not summaries.short.strip() or not summaries.detailed.strip() or not notes.overview.strip():
+        st.error("Generation returned incomplete results. Please try again.")
+        return
+    st.session_state["analysis"] = analysis
     for key in ("quiz", "quiz_error", "quiz_answers", "quiz_score", "quiz_recommendations"):
         st.session_state.pop(key, None)
     st.success("Summaries and study materials generated.")
@@ -273,7 +281,11 @@ def main() -> None:
     if not analysis or analysis["source_text"] != lecture.text:
         if st.button("Generate summaries and study materials", type="primary"):
             _generate_analysis(lecture)
-        return
+            analysis = st.session_state.get("analysis")
+            if not analysis or analysis["source_text"] != lecture.text:
+                return
+        else:
+            return
 
     tabs = st.tabs(["Summary", "Study materials", "Interactive quiz"])
     with tabs[0]:
