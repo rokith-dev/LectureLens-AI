@@ -8,7 +8,11 @@ from lecturelens.groq_service import (
     GroqGenerationError,
     GroqLectureGenerator,
 )
-from lecturelens.youtube_input import YouTubeInputError, fetch_youtube_transcript
+from lecturelens.youtube_input import (
+    YouTubeInputError,
+    create_manual_youtube_lecture,
+    fetch_youtube_transcript,
+)
 
 
 @st.cache_resource
@@ -52,15 +56,32 @@ def _render_input() -> LectureText | None:
             placeholder="https://www.youtube.com/watch?v=...",
             help="The video must provide accessible captions or a transcript.",
         )
-        if not youtube_url.strip():
-            st.info("Enter a YouTube URL to begin.")
-            return None
-        with st.spinner("Retrieving available captions..."):
+        if youtube_url.strip():
+            with st.spinner("Retrieving available captions..."):
+                try:
+                    return fetch_youtube_transcript(youtube_url)
+                except YouTubeInputError as error:
+                    st.error(str(error))
+        else:
+            st.info("Enter a YouTube URL or paste its transcript below.")
+
+        st.subheader("Paste YouTube Transcript")
+        st.caption(
+            "Use this fallback when YouTube blocks caption requests or no accessible "
+            "transcript is available."
+        )
+        pasted_text = st.text_area(
+            "YouTube captions/transcript",
+            height=240,
+            placeholder="Paste the video's captions or transcript here.",
+            key="manual_youtube_transcript",
+        )
+        if st.button("Process pasted transcript", key="process_manual_youtube"):
             try:
-                return fetch_youtube_transcript(youtube_url)
+                return create_manual_youtube_lecture(pasted_text, youtube_url)
             except YouTubeInputError as error:
                 st.error(str(error))
-                return None
+        return None
 
 
 def _render_lecture_metadata(lecture: LectureText) -> None:

@@ -118,6 +118,24 @@ def fetch_youtube_transcript(
     )
 
 
+def create_manual_youtube_lecture(
+    text: str,
+    source_url: str = "",
+) -> LectureText:
+    """Create the same normalized lecture result from user-supplied captions."""
+    normalized_text = normalize_lecture_text(text)
+    if not normalized_text:
+        raise YouTubeInputError(
+            "The pasted YouTube transcript is empty. Paste readable captions and try again."
+        )
+    return LectureText(
+        source_type="youtube",
+        text=normalized_text,
+        title="Pasted YouTube transcript",
+        metadata={"url": source_url.strip(), "input_method": "manual transcript"},
+    )
+
+
 def _fetch_transcript(video_id: str) -> object:
     api = YouTubeTranscriptApi()
     transcripts = api.list(video_id)

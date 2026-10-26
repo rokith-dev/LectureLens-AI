@@ -1,10 +1,12 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from youtube_transcript_api._errors import IpBlocked, NoTranscriptFound
 
 from lecturelens.youtube_input import (
     YouTubeInputError,
+    create_manual_youtube_lecture,
     extract_video_id,
     fetch_youtube_transcript,
 )
@@ -76,3 +78,29 @@ class YouTubeInputTests(unittest.TestCase):
                 "https://youtu.be/dQw4w9WgXcQ",
                 transcript_fetcher=fetcher,
             )
+
+    def test_rejects_empty_pasted_transcript(self) -> None:
+        with self.assertRaisesRegex(YouTubeInputError, "pasted YouTube transcript is empty"):
+            create_manual_youtube_lecture(" \n ")
+
+    def test_normalizes_valid_pasted_transcript(self) -> None:
+        result = create_manual_youtube_lecture(
+            "Activation &amp; learning.\nActivation &amp; learning.",
+            "https://youtu.be/dQw4w9WgXcQ",
+        )
+
+        self.assertEqual(result.source_type, "youtube")
+        self.assertEqual(result.text, "Activation & learning.")
+        self.assertEqual(result.metadata["input_method"], "manual transcript")
+        self.assertEqual(result.metadata["url"], "https://youtu.be/dQw4w9WgXcQ")
+
+    def test_pasted_text_can_be_passed_to_existing_generation_pipeline(self) -> None:
+        lecture = create_manual_youtube_lecture(
+            "Neural networks learn patterns from data. "
+            "Activation functions transform model signals.",
+        )
+        generator = Mock()
+
+        generator.generate_analysis(lecture.text)
+
+        generator.generate_analysis.assert_called_once_with(lecture.text)
