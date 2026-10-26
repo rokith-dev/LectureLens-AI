@@ -5,9 +5,15 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     AgeRestricted,
     CouldNotRetrieveTranscript,
+    InvalidVideoId,
+    IpBlocked,
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
+    VideoUnplayable,
+    YouTubeDataUnparsable,
+    YouTubeRequestFailed,
     YouTubeTranscriptApiException,
 )
 
@@ -57,6 +63,24 @@ def fetch_youtube_transcript(
 
     try:
         transcript = fetcher(video_id)
+    except (IpBlocked, RequestBlocked) as error:
+        raise YouTubeInputError(
+            "YouTube blocked transcript requests from this network or IP. "
+            "Try again later or paste the transcript manually."
+        ) from error
+    except (YouTubeRequestFailed, OSError) as error:
+        raise YouTubeInputError(
+            "YouTube could not be reached while retrieving captions. "
+            "Check the network connection and try again."
+        ) from error
+    except YouTubeDataUnparsable as error:
+        raise YouTubeInputError(
+            "YouTube returned a transcript response that could not be parsed."
+        ) from error
+    except (InvalidVideoId, VideoUnplayable) as error:
+        raise YouTubeInputError(
+            "YouTube rejected this video ID or the video cannot be played."
+        ) from error
     except (
         AgeRestricted,
         CouldNotRetrieveTranscript,
@@ -65,13 +89,14 @@ def fetch_youtube_transcript(
         VideoUnavailable,
     ) as error:
         raise YouTubeInputError(_transcript_error_message(error)) from error
-    except OSError as error:
-        raise YouTubeInputError(
-            "The transcript service could not be reached. Check your connection and try again."
-        ) from error
     except YouTubeTranscriptApiException as error:
         raise YouTubeInputError(
-            "The transcript service could not retrieve captions for this video."
+            f"The YouTube transcript service returned {type(error).__name__}. "
+            "No transcript was retrieved."
+        ) from error
+    except (TypeError, AttributeError, KeyError) as error:
+        raise YouTubeInputError(
+            "The YouTube transcript response had an unexpected format."
         ) from error
 
     snippets = getattr(transcript, "snippets", transcript)
@@ -96,7 +121,10 @@ def fetch_youtube_transcript(
 def _fetch_transcript(video_id: str) -> object:
     api = YouTubeTranscriptApi()
     transcripts = api.list(video_id)
-    transcript = next(iter(transcripts), None)
+    try:
+        transcript = transcripts.find_transcript(("en", "en-US", "en-GB"))
+    except NoTranscriptFound:
+        transcript = next(iter(transcripts), None)
     if transcript is None:
         raise NoTranscriptFound(video_id, (), transcripts)
     return transcript.fetch()

@@ -1,6 +1,8 @@
 import unittest
 from types import SimpleNamespace
 
+from youtube_transcript_api._errors import IpBlocked, NoTranscriptFound
+
 from lecturelens.youtube_input import (
     YouTubeInputError,
     extract_video_id,
@@ -13,9 +15,12 @@ class YouTubeInputTests(unittest.TestCase):
         expected = "dQw4w9WgXcQ"
         for url in (
             f"https://www.youtube.com/watch?v={expected}",
+            f"https://www.youtube.com/watch?x=1&v={expected}&t=20",
             f"https://youtu.be/{expected}",
+            f"https://youtu.be/{expected}?si=tracking&t=20",
             f"https://www.youtube.com/embed/{expected}",
             f"https://www.youtube.com/shorts/{expected}",
+            f"https://www.youtube.com/shorts/{expected}?feature=share",
         ):
             self.assertEqual(extract_video_id(url), expected)
 
@@ -47,6 +52,26 @@ class YouTubeInputTests(unittest.TestCase):
             raise OSError("network unavailable")
 
         with self.assertRaisesRegex(YouTubeInputError, "could not be reached"):
+            fetch_youtube_transcript(
+                "https://youtu.be/dQw4w9WgXcQ",
+                transcript_fetcher=fetcher,
+            )
+
+    def test_reports_blocked_requests_separately(self) -> None:
+        def fetcher(_: str) -> object:
+            raise IpBlocked("blocked")
+
+        with self.assertRaisesRegex(YouTubeInputError, "blocked transcript requests"):
+            fetch_youtube_transcript(
+                "https://youtu.be/dQw4w9WgXcQ",
+                transcript_fetcher=fetcher,
+            )
+
+    def test_reports_missing_captions_separately(self) -> None:
+        def fetcher(_: str) -> object:
+            raise NoTranscriptFound("dQw4w9WgXcQ", (), [])
+
+        with self.assertRaisesRegex(YouTubeInputError, "No accessible transcript"):
             fetch_youtube_transcript(
                 "https://youtu.be/dQw4w9WgXcQ",
                 transcript_fetcher=fetcher,
