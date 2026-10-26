@@ -2,7 +2,7 @@
 
 LectureLens AI is an NLP-based lecture summarization, study-notes, and quiz-generation application.
 
-## Phase 2 status
+## Current application status
 
 Phase 2 implements the two supported lecture input methods:
 
@@ -57,16 +57,14 @@ Run the input tests without requiring a separate test runner:
 python -m unittest discover -s tests -v
 ```
 
-Summarization, study notes, quizzes, glossaries, and other NLP features are
-implemented incrementally. Phase 4 adds source-grounded study notes, ranked
-keywords, and a glossary. Glossary entries that lack an explicit definition in
-the lecture are marked as needing verification. Quiz generation and export
-remain deferred.
+The Streamlit application provides local summarization, source-grounded study
+notes, ranked keywords, a glossary, validated quiz generation, interactive
+answer checking, scoring, and revision recommendations. Glossary entries that
+lack an explicit definition in the lecture are marked as needing verification.
 
-Phase 5 adds validated, source-grounded multiple-choice quiz generation. The
-local generator uses explicit lecture definitions rather than a second large
+The quiz generator uses explicit lecture definitions rather than a second large
 question-generation model, so short lectures may produce fewer questions than
-requested when there is not enough source-supported material. Interactive
-scoring is available in Phase 6. Unanswered questions are counted as incorrect,
-and malformed questions are excluded from the denominator. Export remains
-deferred.
+requested when there is not enough source-supported material. Unanswered
+questions are counted as incorrect, and malformed questions are excluded from
+the denominator. Interactive scoring and revision recommendations are included.
+File export remains intentionally unavailable.
