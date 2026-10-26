@@ -67,4 +67,6 @@ Phase 5 adds validated, source-grounded multiple-choice quiz generation. The
 local generator uses explicit lecture definitions rather than a second large
 question-generation model, so short lectures may produce fewer questions than
 requested when there is not enough source-supported material. Interactive
-scoring and export remain deferred.
+scoring is available in Phase 6. Unanswered questions are counted as incorrect,
+and malformed questions are excluded from the denominator. Export remains
+deferred.

@@ -1,6 +1,13 @@
 import unittest
 
-from lecturelens.quiz import QuizGenerationError, generate_quiz
+from lecturelens.quiz import (
+    QuizGenerationError,
+    QuizQuestion,
+    QuizResult,
+    generate_quiz,
+    revision_recommendations,
+    score_quiz,
+)
 from lecturelens.study_materials import extract_keywords, generate_glossary
 
 
@@ -46,3 +53,46 @@ class QuizTests(unittest.TestCase):
 
         with self.assertRaisesRegex(QuizGenerationError, "four distinct"):
             generate_quiz(short_text, 5, glossary)
+
+    def test_scores_all_correct_all_incorrect_and_unanswered(self) -> None:
+        quiz = generate_quiz(TEXT, 5, self.glossary, self.keywords)
+        all_correct = {index: question.correct_index for index, question in enumerate(quiz.questions)}
+        all_incorrect = {index: (question.correct_index + 1) % 4 for index, question in enumerate(quiz.questions)}
+        unanswered = {index: None for index in range(len(quiz.questions))}
+
+        self.assertEqual(score_quiz(quiz, all_correct).percentage, 100.0)
+        self.assertEqual(score_quiz(quiz, all_incorrect).correct_count, 0)
+        self.assertEqual(score_quiz(quiz, unanswered).answered_count, 0)
+        self.assertEqual(score_quiz(quiz, unanswered).percentage, 0.0)
+
+    def test_zero_valid_questions_do_not_divide(self) -> None:
+        malformed = QuizResult(
+            requested_count=5,
+            questions=(
+                QuizQuestion("Bad", ("only", "two"), 0, "why", "source"),
+            ),
+        )
+
+        result = score_quiz(malformed, {0: 0})
+
+        self.assertEqual(result.valid_question_count, 0)
+        self.assertEqual(result.percentage, 0.0)
+
+    def test_scoring_is_idempotent_for_duplicate_submission(self) -> None:
+        quiz = generate_quiz(TEXT, 5, self.glossary, self.keywords)
+        answers = {index: question.correct_index for index, question in enumerate(quiz.questions)}
+
+        first = score_quiz(quiz, answers)
+        second = score_quiz(quiz, answers)
+
+        self.assertEqual(first, second)
+
+    def test_revision_recommendations_include_only_incorrect_answers(self) -> None:
+        quiz = generate_quiz(TEXT, 5, self.glossary, self.keywords)
+        answers = {index: question.correct_index for index, question in enumerate(quiz.questions)}
+        answers[0] = (quiz.questions[0].correct_index + 1) % 4
+
+        recommendations = revision_recommendations(quiz, answers)
+
+        self.assertEqual(len(recommendations), 1)
+        self.assertIn(quiz.questions[0].source_passage, recommendations[0].source_passage)

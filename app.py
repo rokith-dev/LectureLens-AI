@@ -2,7 +2,12 @@ import streamlit as st
 
 from lecturelens.models import LectureText
 from lecturelens.pdf_input import PdfInputError, extract_pdf_text
-from lecturelens.quiz import QuizGenerationError, generate_quiz
+from lecturelens.quiz import (
+    QuizGenerationError,
+    generate_quiz,
+    revision_recommendations,
+    score_quiz,
+)
 from lecturelens.study_materials import (
     StudyMaterialsError,
     extract_keywords,
@@ -91,15 +96,75 @@ def render_study_materials(lecture: LectureText) -> None:
         st.error(st.session_state["quiz_error"])
     quiz = st.session_state.get("quiz")
     if quiz:
-        for index, question in enumerate(quiz.questions, start=1):
-            st.markdown(f"**{index}. {question.question}**")
-            for option_index, option in enumerate(question.options, start=1):
-                st.markdown(f"{option_index}. {option}")
-            st.caption(
-                f"Correct answer: {question.correct_index + 1}. "
-                f"{question.explanation}"
+        st.info("Unanswered questions are scored as incorrect.")
+        for index, question in enumerate(quiz.questions):
+            if len(question.options) != 4 or question.correct_index not in range(4):
+                st.warning(f"Question {index + 1} was skipped because it is malformed.")
+                continue
+            st.markdown(f"**{index + 1}. {question.question}**")
+            st.radio(
+                "Choose one answer",
+                options=question.options,
+                key=f"quiz_answer_{index}",
+                index=None,
+                label_visibility="collapsed",
             )
-            st.caption(f"Source: {question.source_passage}")
+
+        if st.button("Submit quiz", type="primary"):
+            answers = {
+                index: (
+                    quiz.questions[index].options.index(st.session_state[f"quiz_answer_{index}"])
+                    if st.session_state.get(f"quiz_answer_{index}") in quiz.questions[index].options
+                    else None
+                )
+                for index in range(len(quiz.questions))
+            }
+            st.session_state["quiz_answers"] = answers
+            st.session_state["quiz_score"] = score_quiz(quiz, answers)
+            st.session_state["quiz_recommendations"] = revision_recommendations(quiz, answers)
+
+        score = st.session_state.get("quiz_score")
+        if score:
+            st.subheader("Quiz results")
+            st.metric(
+                "Score",
+                f"{score.percentage:.2f}%",
+                f"{score.correct_count}/{score.valid_question_count} correct",
+            )
+            st.write(
+                f"Answered: {score.answered_count} of {score.valid_question_count}. "
+                "Unanswered questions were counted as incorrect."
+            )
+            answers = st.session_state.get("quiz_answers", {})
+            for index, question in enumerate(quiz.questions):
+                if len(question.options) != 4 or question.correct_index not in range(4):
+                    continue
+                selected = answers.get(index)
+                selected_text = question.options[selected] if selected is not None else "Unanswered"
+                correct_text = question.options[question.correct_index]
+                status = "Correct" if selected == question.correct_index else "Incorrect"
+                st.markdown(f"**Question {index + 1}: {status}**")
+                st.write(f"Selected answer: {selected_text}")
+                st.write(f"Correct answer: {correct_text}")
+                st.write(f"Explanation: {question.explanation}")
+                st.caption(f"Source: {question.source_passage}")
+
+            recommendations = st.session_state.get("quiz_recommendations", ())
+            if recommendations:
+                st.subheader("Revision recommendations")
+                for recommendation in recommendations:
+                    st.markdown(f"- **Review:** {recommendation.question}")
+                    st.write(f"Correct answer: {recommendation.correct_answer}")
+                    st.write(f"Why: {recommendation.explanation}")
+                    st.caption(f"Lecture passage: {recommendation.source_passage}")
+            if st.button("Retake quiz"):
+                for index in range(len(quiz.questions)):
+                    st.session_state.pop(f"quiz_answer_{index}", None)
+                st.session_state.pop("quiz_answers", None)
+                st.session_state.pop("quiz_score", None)
+                st.session_state.pop("quiz_recommendations", None)
+                st.rerun()
+
         if len(quiz.questions) < quiz.requested_count:
             st.info(
                 f"Generated {len(quiz.questions)} validated question(s); "

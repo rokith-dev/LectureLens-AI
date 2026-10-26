@@ -23,6 +23,22 @@ class QuizResult:
     questions: tuple[QuizQuestion, ...]
 
 
+@dataclass(frozen=True)
+class QuizScore:
+    correct_count: int
+    valid_question_count: int
+    percentage: float
+    answered_count: int
+
+
+@dataclass(frozen=True)
+class RevisionRecommendation:
+    question: str
+    correct_answer: str
+    explanation: str
+    source_passage: str
+
+
 def generate_quiz(
     text: str,
     question_count: int,
@@ -65,6 +81,55 @@ def generate_quiz(
     return QuizResult(requested_count=question_count, questions=tuple(questions))
 
 
+def score_quiz(
+    quiz: QuizResult,
+    answers: dict[int, int | None],
+) -> QuizScore:
+    """Score only structurally valid questions; unanswered answers count wrong."""
+    correct_count = 0
+    answered_count = 0
+    valid_count = 0
+    for index, question in enumerate(quiz.questions):
+        if not _is_valid_question(question):
+            continue
+        valid_count += 1
+        answer = answers.get(index)
+        if answer is not None:
+            answered_count += 1
+        if answer == question.correct_index:
+            correct_count += 1
+
+    percentage = round((correct_count / valid_count) * 100, 2) if valid_count else 0.0
+    return QuizScore(
+        correct_count=correct_count,
+        valid_question_count=valid_count,
+        percentage=percentage,
+        answered_count=answered_count,
+    )
+
+
+def revision_recommendations(
+    quiz: QuizResult,
+    answers: dict[int, int | None],
+) -> tuple[RevisionRecommendation, ...]:
+    """Return lecture-grounded recommendations for valid incorrect answers."""
+    recommendations = []
+    for index, question in enumerate(quiz.questions):
+        if not _is_valid_question(question):
+            continue
+        if answers.get(index) == question.correct_index:
+            continue
+        recommendations.append(
+            RevisionRecommendation(
+                question=question.question,
+                correct_answer=question.options[question.correct_index],
+                explanation=question.explanation,
+                source_passage=question.source_passage,
+            )
+        )
+    return tuple(recommendations)
+
+
 def _build_question(
     entry: GlossaryEntry,
     terms: list[GlossaryEntry],
@@ -81,13 +146,23 @@ def _build_question(
 
 
 def _validate_question(question: QuizQuestion, source_text: str) -> bool:
-    if len(question.options) != 4 or len(set(option.lower() for option in question.options)) != 4:
+    return _is_valid_question(question) and question.source_passage in source_text
+
+
+def _is_valid_question(question: QuizQuestion) -> bool:
+    if not isinstance(question, QuizQuestion):
+        return False
+    if not question.question.strip() or not question.explanation.strip():
+        return False
+    if len(question.options) != 4:
+        return False
+    if any(not isinstance(option, str) or not option.strip() for option in question.options):
+        return False
+    if len(set(option.casefold().strip() for option in question.options)) != 4:
         return False
     if question.correct_index not in range(4):
         return False
-    if not question.source_passage.strip() or question.source_passage not in source_text:
-        return False
-    return bool(question.options[question.correct_index].strip())
+    return bool(question.source_passage.strip())
 
 
 def _unique_terms(
