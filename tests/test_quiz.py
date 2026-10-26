@@ -96,3 +96,28 @@ class QuizTests(unittest.TestCase):
 
         self.assertEqual(len(recommendations), 1)
         self.assertIn(quiz.questions[0].source_passage, recommendations[0].source_passage)
+
+    def test_generates_questions_from_explanatory_paragraphs(self) -> None:
+        text = (
+            "Neural networks learn patterns by adjusting weights during training. "
+            "ReLU helps a model retain positive signals while setting negative signals to zero. "
+            "Sigmoid maps a value into a range between zero and one. "
+            "Backpropagation updates weights using the error measured at the output."
+        )
+        keywords = extract_keywords(text)
+        glossary = generate_glossary(text, keywords)
+
+        result = generate_quiz(text, 5, glossary, keywords)
+
+        self.assertGreaterEqual(len(result.questions), 1)
+        for question in result.questions:
+            self.assertEqual(len(question.options), 4)
+            self.assertEqual(len({option.casefold() for option in question.options}), 4)
+            self.assertTrue(question.explanation)
+            self.assertIn(question.source_passage, text)
+
+    def test_rejects_lecture_with_too_few_source_concepts(self) -> None:
+        text = "Neural networks learn patterns from data."
+
+        with self.assertRaisesRegex(QuizGenerationError, "four distinct"):
+            generate_quiz(text, 5)

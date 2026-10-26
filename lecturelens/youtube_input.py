@@ -12,6 +12,7 @@ from youtube_transcript_api._errors import (
 )
 
 from .models import LectureText
+from .study_materials import normalize_lecture_text
 
 
 class YouTubeInputError(ValueError):
@@ -80,6 +81,7 @@ def fetch_youtube_transcript(
         if text:
             text_parts.append(str(text).strip())
     text = "\n".join(part for part in text_parts if part)
+    text = normalize_lecture_text(text)
     if not text:
         raise YouTubeInputError("The available transcript contains no readable text.")
 

@@ -3,6 +3,7 @@ from io import BytesIO
 import pymupdf as fitz
 
 from .models import LectureText
+from .study_materials import normalize_lecture_text
 
 
 class PdfInputError(ValueError):
@@ -28,6 +29,7 @@ def extract_pdf_text(file_data: bytes, filename: str) -> LectureText:
     finally:
         document.close()
 
+    text = normalize_lecture_text(text)
     if not text:
         raise PdfInputError(
             "This PDF contains no extractable text. It may be scanned or image-only; "

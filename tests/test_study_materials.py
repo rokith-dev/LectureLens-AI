@@ -5,6 +5,7 @@ from lecturelens.study_materials import (
     extract_keywords,
     generate_glossary,
     generate_study_notes,
+    normalize_lecture_text,
 )
 
 
@@ -52,3 +53,28 @@ class StudyMaterialsTests(unittest.TestCase):
     def test_study_notes_reject_missing_summary_context(self) -> None:
         with self.assertRaises(StudyMaterialsError):
             generate_study_notes(LECTURE, "", "Detailed summary")
+
+    def test_normalization_removes_artifacts_without_losing_multilingual_text(self) -> None:
+        noisy = (
+            "ReLU &amp; sigmoid are activation functions.\n"
+            "ReLU &amp; sigmoid are activation functions.\n"
+            "sigmoid sigmoid sigmoid\n"
+            "الشبكات العصبية تتعلم من البيانات."
+        )
+
+        normalized = normalize_lecture_text(noisy)
+
+        self.assertEqual(normalized.count("activation functions"), 1)
+        self.assertNotIn("sigmoid sigmoid sigmoid", normalized)
+        self.assertIn("الشبكات العصبية", normalized)
+
+    def test_notes_deduplicate_repeated_source_sentences(self) -> None:
+        text = (
+            "Neural networks learn patterns from data. "
+            "Neural networks learn patterns from data. "
+            "ReLU is an activation function."
+        )
+        notes = generate_study_notes(text, "Neural networks learn from data.", "A lecture about neural networks.")
+
+        self.assertEqual(len(notes.bullet_points), 2)
+        self.assertEqual(len(notes.key_takeaways), len(set(notes.key_takeaways)))

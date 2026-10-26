@@ -1,5 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass
+from html import unescape
 import re
 
 
@@ -40,7 +41,7 @@ _STOPWORDS = {
     "through", "to", "under", "use", "used", "using", "was", "were",
     "what", "when", "where", "which", "who", "with", "would", "your",
 }
-_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]{2,}")
+_WORD_RE = re.compile(r"[^\W\d_][\w'-]{2,}", re.UNICODE)
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _DEFINITION_RE = re.compile(
     r"(?P<term>[A-Za-z][A-Za-z0-9 -]{1,60}?)\s+"
@@ -56,7 +57,8 @@ def extract_keywords(text: str, limit: int = 12) -> tuple[Keyword, ...]:
     if limit < 1:
         raise ValueError("limit must be positive.")
 
-    words = [word.lower() for word in _WORD_RE.findall(text)]
+    normalized_text = normalize_lecture_text(text)
+    words = [word.casefold() for word in _WORD_RE.findall(normalized_text)]
     candidates = [word for word in words if word not in _STOPWORDS]
     counts = Counter(candidates)
     phrases: Counter[str] = Counter()
@@ -73,13 +75,20 @@ def extract_keywords(text: str, limit: int = 12) -> tuple[Keyword, ...]:
         reverse=True,
     )
     results: list[Keyword] = []
-    seen_stems: set[str] = set()
+    seen_phrases: set[str] = set()
     maximum = ranked[0][1] if ranked else 1
     for phrase, count in ranked:
-        stem = phrase.split()[0]
-        if stem in seen_stems and " " not in phrase:
+        normalized_phrase = _normalize_phrase(phrase)
+        if normalized_phrase in seen_phrases:
             continue
-        seen_stems.add(stem)
+        if _is_repetitive_phrase(phrase) or _is_noise_phrase(phrase):
+            continue
+        if any(
+            normalized_phrase in existing or existing in normalized_phrase
+            for existing in seen_phrases
+        ):
+            continue
+        seen_phrases.add(normalized_phrase)
         score = round((count / maximum) * (1 + 0.1 * phrase.count(" ")), 3)
         results.append(Keyword(phrase=phrase, score=score))
         if len(results) >= limit:
@@ -90,9 +99,10 @@ def extract_keywords(text: str, limit: int = 12) -> tuple[Keyword, ...]:
 def generate_glossary(text: str, keywords: tuple[Keyword, ...] | None = None) -> tuple[GlossaryEntry, ...]:
     """Build glossary entries from explicit definitions or source context."""
     _validate_text(text)
-    sentences = _sentences(text)
+    normalized_text = normalize_lecture_text(text)
+    sentences = _sentences(normalized_text)
     explicit = _explicit_definitions(sentences)
-    selected = keywords or extract_keywords(text, limit=12)
+    selected = keywords or extract_keywords(normalized_text, limit=12)
     entries: list[GlossaryEntry] = []
     seen: set[str] = set()
     for keyword in selected:
@@ -130,17 +140,23 @@ def generate_study_notes(
     if not short_summary.strip() or not detailed_summary.strip():
         raise StudyMaterialsError("Both short and detailed summaries are required.")
 
-    sentences = _sentences(text)
-    keywords = extract_keywords(text)
-    glossary = generate_glossary(text, keywords)
+    normalized_text = normalize_lecture_text(text)
+    sentences = _sentences(normalized_text)
+    keywords = extract_keywords(normalized_text)
+    glossary = generate_glossary(normalized_text, keywords)
     definition_terms = {entry.term.lower() for entry in glossary if not entry.needs_verification}
     examples = tuple(
         sentence for sentence in sentences
         if re.search(r"\b(for example|e\.g\.|such as|for instance)\b", sentence, re.IGNORECASE)
     )
-    headings = tuple(_heading(sentence) for sentence in sentences[: min(3, len(sentences))])
-    bullets = tuple(sentences[: min(8, len(sentences))])
-    takeaways = tuple(dict.fromkeys((short_summary.strip(), *sentences[-2:])))[:3]
+    headings = tuple(dict.fromkeys(
+        _heading(sentence) for sentence in sentences[: min(5, len(sentences))]
+    ))[:3]
+    bullets = tuple(dict.fromkeys(sentences))[:8]
+    takeaways = tuple(dict.fromkeys(
+        item.strip() for item in (short_summary, *sentences[-3:])
+        if item.strip()
+    ))[:3]
     return StudyNotes(
         overview=detailed_summary.strip(),
         headings=headings,
@@ -160,7 +176,64 @@ def _validate_text(text: str) -> None:
 
 
 def _sentences(text: str) -> list[str]:
-    return [sentence.strip() for sentence in _SENTENCE_RE.split(text) if sentence.strip()]
+    return list(dict.fromkeys(
+        sentence.strip() for sentence in _SENTENCE_RE.split(normalize_lecture_text(text))
+        if sentence.strip()
+    ))
+
+
+def normalize_lecture_text(text: str) -> str:
+    """Normalize extraction artifacts while preserving meaningful source wording."""
+    if not isinstance(text, str):
+        raise StudyMaterialsError("Lecture text must be a string.")
+    cleaned = unescape(text).replace("\u00a0", " ")
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\s*\n\s*", "\n", cleaned)
+    lines: list[str] = []
+    previous_line = ""
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if _is_repetitive_line(line) or _normalize_phrase(line) == _normalize_phrase(previous_line):
+            previous_line = line
+            continue
+        lines.append(line)
+        previous_line = line
+    cleaned = " ".join(lines)
+    cleaned = re.sub(
+        r"\b([^\W\d_][\w'-]{2,})(?:\s+\1){2,}\b",
+        r"\1",
+        cleaned,
+        flags=re.IGNORECASE | re.UNICODE,
+    )
+    sentences = []
+    for sentence in _SENTENCE_RE.split(cleaned):
+        sentence = re.sub(r"\s+", " ", sentence).strip()
+        if sentence and _normalize_phrase(sentence) not in {
+            _normalize_phrase(item) for item in sentences
+        }:
+            sentences.append(sentence)
+    return "\n".join(sentences)
+
+
+def _normalize_phrase(value: str) -> str:
+    return re.sub(r"\W+", " ", value.casefold(), flags=re.UNICODE).strip()
+
+
+def _is_repetitive_line(line: str) -> bool:
+    words = _WORD_RE.findall(line)
+    return bool(words) and len(words) >= 3 and len({word.casefold() for word in words}) == 1
+
+
+def _is_repetitive_phrase(phrase: str) -> bool:
+    words = phrase.split()
+    return len(words) > 1 and len(set(words)) == 1
+
+
+def _is_noise_phrase(phrase: str) -> bool:
+    words = phrase.split()
+    return len(words) == 1 and len(words[0]) < 3
 
 
 def _explicit_definitions(sentences: list[str]) -> dict[str, str]:

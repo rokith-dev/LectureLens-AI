@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import re
 
-from .study_materials import GlossaryEntry, Keyword
+from .study_materials import GlossaryEntry, Keyword, generate_glossary
 
 
 class QuizGenerationError(ValueError):
@@ -45,17 +45,19 @@ def generate_quiz(
     glossary: tuple[GlossaryEntry, ...] = (),
     keywords: tuple[Keyword, ...] = (),
 ) -> QuizResult:
-    """Generate validated definition-based MCQs from explicit lecture content."""
+    """Generate validated MCQs from explicit definitions and source context."""
     if not isinstance(text, str) or not text.strip():
         raise QuizGenerationError("Lecture text is empty; provide readable lecture content.")
     if question_count not in {5, 10, 15}:
         raise QuizGenerationError("Choose 5, 10, or 15 questions.")
 
-    definitions = [
+    source_entries = [
         entry for entry in glossary
-        if not entry.needs_verification and entry.definition.strip()
+        if entry.definition.strip()
     ]
-    terms = _unique_terms(definitions, keywords)
+    if not source_entries and len(re.findall(r"[.!?]", text)) >= 2:
+        source_entries = list(generate_glossary(text, keywords))
+    terms = _unique_terms(source_entries, keywords)
     if len(terms) < 4:
         raise QuizGenerationError(
             "The lecture does not contain at least four distinct supported concepts "
@@ -64,7 +66,7 @@ def generate_quiz(
 
     questions: list[QuizQuestion] = []
     seen_questions: set[str] = set()
-    for entry in definitions:
+    for entry in source_entries:
         if len(questions) >= question_count:
             break
         question = _build_question(entry, terms)
@@ -76,7 +78,7 @@ def generate_quiz(
 
     if not questions:
         raise QuizGenerationError(
-            "No questions could be validated from the lecture's explicit definitions."
+            "No source-supported questions could be validated from the lecture."
         )
     return QuizResult(requested_count=question_count, questions=tuple(questions))
 
@@ -140,7 +142,11 @@ def _build_question(
         question=f"Which term is defined by this lecture passage: \"{entry.definition}\"",
         options=options,
         correct_index=0,
-        explanation=f"The passage explicitly defines {entry.term}.",
+        explanation=(
+            f"The lecture explicitly defines {entry.term}."
+            if not entry.needs_verification
+            else f"The lecture discusses {entry.term} in this passage."
+        ),
         source_passage=entry.definition,
     )
 
