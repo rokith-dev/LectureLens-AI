@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 from unittest.mock import Mock
 
 from youtube_transcript_api._errors import IpBlocked, NoTranscriptFound
@@ -93,6 +94,64 @@ class YouTubeInputTests(unittest.TestCase):
         self.assertEqual(result.text, "Activation & learning.")
         self.assertEqual(result.metadata["input_method"], "manual transcript")
         self.assertEqual(result.metadata["url"], "https://youtu.be/dQw4w9WgXcQ")
+
+    def test_blocked_direct_request_uses_mocked_hosted_provider(self) -> None:
+        def direct_fetcher(_: str) -> object:
+            raise IpBlocked("blocked")
+
+        def hosted_fetcher(url: str, api_key: str) -> str:
+            self.assertEqual(url, "https://youtu.be/dQw4w9WgXcQ")
+            self.assertEqual(api_key, "provider-test-key")
+            return "Hosted transcript content for the lecture."
+
+        with patch.dict("os.environ", {"SUPADATA_API_KEY": "provider-test-key"}):
+            result = fetch_youtube_transcript(
+                "https://youtu.be/dQw4w9WgXcQ",
+                transcript_fetcher=direct_fetcher,
+                provider_fetcher=hosted_fetcher,
+            )
+
+        self.assertIn("Hosted transcript", result.text)
+        self.assertEqual(result.metadata["transcript_provider"], "supadata")
+
+    def test_hosted_provider_http_response_is_parsed(self) -> None:
+        class Response:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict[str, object]:
+                return {"content": "Transcript returned by hosted API."}
+
+        def direct_fetcher(_: str) -> object:
+            raise IpBlocked("blocked")
+
+        with patch.dict("os.environ", {"SUPADATA_API_KEY": "provider-test-key"}):
+            with patch("lecturelens.youtube_input.requests.get", return_value=Response()):
+                result = fetch_youtube_transcript(
+                    "https://youtu.be/dQw4w9WgXcQ",
+                    transcript_fetcher=direct_fetcher,
+                )
+
+        self.assertEqual(result.text, "Transcript returned by hosted API.")
+
+    def test_hosted_provider_auth_failure_is_clear(self) -> None:
+        class Response:
+            status_code = 401
+
+            @staticmethod
+            def json() -> dict[str, object]:
+                return {}
+
+        def direct_fetcher(_: str) -> object:
+            raise IpBlocked("blocked")
+
+        with patch.dict("os.environ", {"SUPADATA_API_KEY": "provider-test-key"}):
+            with patch("lecturelens.youtube_input.requests.get", return_value=Response()):
+                with self.assertRaisesRegex(YouTubeInputError, "rejected SUPADATA_API_KEY"):
+                    fetch_youtube_transcript(
+                        "https://youtu.be/dQw4w9WgXcQ",
+                        transcript_fetcher=direct_fetcher,
+                    )
 
     def test_pasted_text_can_be_passed_to_existing_generation_pipeline(self) -> None:
         lecture = create_manual_youtube_lecture(

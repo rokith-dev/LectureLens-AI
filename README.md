@@ -17,7 +17,11 @@ generated through the Groq API. The configured model is read from
 `GROQ_MODEL`, and the application verifies that it is available to the
 configured account before making a request. The API key is loaded from
 `GROQ_API_KEY` in a local `.env` file and is never displayed or committed.
-Copy `.env.example` to `.env` and set both values before generating materials.
+Copy `.env.example` to `.env` and set the Groq values plus
+`SUPADATA_API_KEY` before using automatic YouTube processing. Supadata accepts
+the YouTube URL, retrieves native captions when available, and can generate a
+transcript with speech-to-text when captions are unavailable. Set
+`SUPADATA_BASE_URL` only when using a compatible endpoint or mock service.
 Long lectures are processed in bounded chunks. Groq responses must be valid
 JSON and source-grounded; malformed or unsupported results are rejected.
 
@@ -74,3 +78,19 @@ material. Unanswered questions are counted as incorrect, and malformed
 questions are excluded from the denominator. Interactive scoring and revision
 recommendations are included.
 File export remains intentionally unavailable.
+
+### Automatic YouTube transcripts
+
+The app first attempts the installed YouTube transcript library. If YouTube
+blocks the request or captions are unavailable, it uses Supadata when
+`SUPADATA_API_KEY` is configured:
+
+```env
+SUPADATA_API_KEY=your_supadata_api_key_here
+SUPADATA_BASE_URL=https://api.supadata.ai/v1
+```
+
+Start the app with `streamlit run app.py`, choose **YouTube URL**, paste a
+standard YouTube URL, and wait while the transcript and Groq study materials
+are generated. If the provider is not configured, the app reports the exact
+setup requirement; the optional manual transcript area remains available.
