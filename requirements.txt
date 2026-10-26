@@ -1,9 +1,9 @@
 # Core application
 streamlit>=1.39,<2
 
-# Planned input handling
-pypdf>=5,<7
+# Input handling
+pymupdf>=1.24,<2
 youtube-transcript-api>=0.6,<2
 
-# Lightweight NLP utilities; pretrained models are intentionally not required in Phase 1
+# Lightweight NLP utilities; pretrained models are intentionally not required yet
 nltk>=3.9,<4

@@ -2,16 +2,17 @@
 
 LectureLens AI is an NLP-based lecture summarization, study-notes, and quiz-generation application.
 
-## Phase 1 status
+## Phase 2 status
 
-Phase 1 prepares the Windows development environment only. Application features and UI flows are intentionally not implemented yet.
-
-The planned application will support exactly these input methods:
+Phase 2 implements the two supported lecture input methods:
 
 1. A YouTube video URL, using an accessible transcript or captions.
 2. A PDF upload, with text extracted from the PDF.
 
-Pretrained NLP models are not downloaded during environment setup.
+PDF text extraction uses PyMuPDF. Scanned or image-only PDFs are reported as
+unextractable; OCR is not implemented. YouTube captions are retrieved through
+`youtube-transcript-api` when the video provides accessible captions. The video
+itself is never downloaded.
 
 ## Windows setup
 
@@ -39,7 +40,20 @@ Verify the environment:
 ```powershell
 python --version
 python -m pip --version
-python -c "import nltk, pypdf, streamlit, youtube_transcript_api; print('imports ok')"
+python -c "import pymupdf, nltk, streamlit, youtube_transcript_api; print('imports ok')"
 ```
 
-No application entry point exists yet. Phase 2 can add the Streamlit application after this setup is reviewed.
+Run the application:
+
+```powershell
+streamlit run app.py
+```
+
+Run the input tests without requiring a separate test runner:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Summarization, study notes, quizzes, glossaries, and other NLP features are
+intentionally deferred to Phase 3.
