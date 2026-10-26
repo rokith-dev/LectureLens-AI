@@ -2,25 +2,18 @@ import streamlit as st
 
 from lecturelens.models import LectureText
 from lecturelens.pdf_input import PdfInputError, extract_pdf_text
-from lecturelens.quiz import (
-    QuizGenerationError,
-    generate_quiz,
-    revision_recommendations,
-    score_quiz,
+from lecturelens.quiz import revision_recommendations, score_quiz
+from lecturelens.groq_service import (
+    GroqConfigurationError,
+    GroqGenerationError,
+    GroqLectureGenerator,
 )
-from lecturelens.study_materials import (
-    StudyMaterialsError,
-    extract_keywords,
-    generate_glossary,
-    generate_study_notes,
-)
-from lecturelens.summarizer import LectureSummarizer, SummarizationError
 from lecturelens.youtube_input import YouTubeInputError, fetch_youtube_transcript
 
 
 @st.cache_resource
-def get_summarizer() -> LectureSummarizer:
-    return LectureSummarizer()
+def get_groq_generator() -> GroqLectureGenerator:
+    return GroqLectureGenerator()
 
 
 def _render_header() -> None:
@@ -89,11 +82,12 @@ def _generate_analysis(lecture: LectureText) -> None:
 
     with st.spinner("Generating summaries and study materials..."):
         try:
-            summaries = get_summarizer().summarize(lecture.text)
-            keywords = extract_keywords(lecture.text)
-            glossary = generate_glossary(lecture.text, keywords)
-            notes = generate_study_notes(lecture.text, summaries.short, summaries.detailed)
-        except (SummarizationError, StudyMaterialsError) as error:
+            generated = get_groq_generator().generate_analysis(lecture.text)
+            summaries = generated.summaries
+            keywords = generated.keywords
+            glossary = generated.glossary
+            notes = generated.notes
+        except (GroqConfigurationError, GroqGenerationError) as error:
             st.error(str(error))
             return
 
@@ -179,15 +173,12 @@ def _render_quiz(lecture: LectureText, analysis: dict) -> None:
         if st.button("Generate quiz", type="primary"):
             with st.spinner("Generating validated quiz questions..."):
                 try:
-                    st.session_state["quiz"] = generate_quiz(
-                        lecture.text,
-                        question_count,
-                        analysis["glossary"],
-                        analysis["keywords"],
+                    st.session_state["quiz"] = get_groq_generator().generate_quiz(
+                        lecture.text, question_count
                     )
                     st.session_state.pop("quiz_error", None)
                     st.rerun()
-                except QuizGenerationError as error:
+                except (GroqConfigurationError, GroqGenerationError) as error:
                     st.session_state["quiz_error"] = str(error)
         if st.session_state.get("quiz_error"):
             st.warning(st.session_state["quiz_error"])
