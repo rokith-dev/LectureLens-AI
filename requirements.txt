@@ -7,3 +7,7 @@ youtube-transcript-api>=0.6,<2
 
 # Lightweight NLP utilities; pretrained models are intentionally not required yet
 nltk>=3.9,<4
+
+# Local CPU summarization model
+torch>=2.4,<3
+transformers>=4.45,<5

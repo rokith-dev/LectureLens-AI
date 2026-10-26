@@ -12,7 +12,9 @@ Phase 2 implements the two supported lecture input methods:
 PDF text extraction uses PyMuPDF. Scanned or image-only PDFs are reported as
 unextractable; OCR is not implemented. YouTube captions are retrieved through
 `youtube-transcript-api` when the video provides accessible captions. The video
-itself is never downloaded.
+itself is never downloaded. Summarization uses the local `google-t5/t5-small`
+Transformer model on CPU; its weights are downloaded on the first summary
+request and cached locally.
 
 ## Windows setup
 
