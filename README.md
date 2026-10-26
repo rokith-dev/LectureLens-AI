@@ -58,4 +58,7 @@ python -m unittest discover -s tests -v
 ```
 
 Summarization, study notes, quizzes, glossaries, and other NLP features are
-intentionally deferred to Phase 3.
+implemented incrementally. Phase 4 adds source-grounded study notes, ranked
+keywords, and a glossary. Glossary entries that lack an explicit definition in
+the lecture are marked as needing verification. Quiz generation and export
+remain deferred.

@@ -3,6 +3,12 @@ import streamlit as st
 from lecturelens.models import LectureText
 from lecturelens.pdf_input import PdfInputError, extract_pdf_text
 from lecturelens.summarizer import LectureSummarizer, SummarizationError
+from lecturelens.study_materials import (
+    StudyMaterialsError,
+    extract_keywords,
+    generate_glossary,
+    generate_study_notes,
+)
 from lecturelens.youtube_input import YouTubeInputError, fetch_youtube_transcript
 
 
@@ -54,3 +60,47 @@ if lecture is not None:
                 st.subheader("Detailed summary")
                 st.write(summaries.detailed)
                 st.caption(f"Processed {summaries.chunk_count} lecture text chunk(s).")
+                with st.spinner("Generating study notes, keywords, and glossary..."):
+                    try:
+                        keywords = extract_keywords(lecture.text)
+                        glossary = generate_glossary(lecture.text, keywords)
+                        notes = generate_study_notes(
+                            lecture.text,
+                            summaries.short,
+                            summaries.detailed,
+                        )
+                    except StudyMaterialsError as error:
+                        st.error(str(error))
+                    else:
+                        st.subheader("Study notes")
+                        st.write("**Overview**")
+                        st.write(notes.overview)
+                        st.write("**Main headings**")
+                        for heading in notes.headings:
+                            st.markdown(f"- {heading}")
+                        st.write("**Important concepts**")
+                        for concept in notes.important_concepts:
+                            st.markdown(f"- {concept}")
+                        st.write("**Notes**")
+                        for bullet in notes.bullet_points:
+                            st.markdown(f"- {bullet}")
+                        if notes.supported_definitions:
+                            st.write("**Definitions supported by the lecture**")
+                            for entry in notes.supported_definitions:
+                                st.markdown(f"- **{entry.term}:** {entry.definition}")
+                        if notes.examples:
+                            st.write("**Examples from the lecture**")
+                            for example in notes.examples:
+                                st.markdown(f"- {example}")
+                        st.write("**Key takeaways**")
+                        for takeaway in notes.key_takeaways:
+                            st.markdown(f"- {takeaway}")
+
+                        st.subheader("Keywords")
+                        for keyword in keywords:
+                            st.markdown(f"- **{keyword.phrase}** — relevance {keyword.score:.3f}")
+
+                        st.subheader("Glossary")
+                        for entry in glossary:
+                            verification = " *(needs verification)*" if entry.needs_verification else ""
+                            st.markdown(f"- **{entry.term}:** {entry.definition}{verification}")
